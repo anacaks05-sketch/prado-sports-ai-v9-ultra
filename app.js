@@ -393,6 +393,15 @@ function renderHome(){
   }
 
   if(topPicks.length){
+    const featured=topPicks[0];
+    const fm=MATCHES.find(x=>x.id===featured.matchId);
+    if(fm){
+      html += sectionHead('💎 Sinal premium da IA', 'Abrir análise', ()=>goToPage('ai'));
+      html += featuredSignalCard(featured, fm);
+    }
+  }
+
+  if(topPicks.length){
     html += sectionHead('🤖 Top palpites IA', 'Ver todos', ()=>goToPage('ai'));
     html += `<div style="display:flex;flex-direction:column;gap:8px">`;
     topPicks.forEach((p,i)=>{
@@ -534,6 +543,32 @@ function statsHasValues(stats){
   return false;
 }
 
+
+function featuredSignalCard(p,m){
+  const lg=leagueOf(m);
+  const scoreLine=m.status==='scheduled' ? `${fmtDate(m.date)} · ${fmtTime(m.date)}` : `${m.hs} × ${m.as}`;
+  const statusText=m.status==='live' ? `🔴 ${m.minute}' ao vivo` : m.status==='scheduled' ? 'Pré-jogo' : 'Encerrado';
+  return `<div class="featured-signal-card" onclick="goToPage('ai')">
+    <div class="featured-signal-top">
+      <div>
+        <div class="featured-signal-kicker">${lg.icon} ${lg.name}</div>
+        <div class="featured-signal-match">${teamName(m.home)} <span>vs</span> ${teamName(m.away)}</div>
+      </div>
+      <div class="featured-signal-ring">${p.confidence}%</div>
+    </div>
+    <div class="featured-signal-main">
+      <div class="featured-signal-pick">${p.pick}</div>
+      <div class="featured-signal-sub">${statusText} · ${scoreLine}</div>
+    </div>
+    <div class="featured-signal-tags">${p.markets.slice(0,3).map(mk=>`<span class="market-tag ${mk.type||''}">${mk.label}</span>`).join('')}</div>
+    <div class="featured-signal-footer">
+      <div class="featured-mini-stat"><b>${p.probs.home}%</b><span>${teamName(m.home).split(' ')[0]}</span></div>
+      <div class="featured-mini-stat"><b>${p.probs.draw}%</b><span>Empate</span></div>
+      <div class="featured-mini-stat"><b>${p.probs.away}%</b><span>${teamName(m.away).split(' ')[0]}</span></div>
+    </div>
+  </div>`;
+}
+
 // ===================== AI PAGE =====================
 function renderAI(){
   let html=`<div class="section-head" style="margin-top:4px"><div class="section-title display">🧠 Central IA Premium</div></div>`;
@@ -542,7 +577,10 @@ function renderAI(){
     <div class="ai-command-kicker">✦ Prado Ultra Brain</div>
     <div class="ai-command-title">Central IA<br><span>Revolution Ultra</span></div>
     <div class="ai-command-sub">Análises modernas de partidas, scanner de valor, leitura tática, riscos e oportunidades de entrada em um só painel.</div>
-    <button class="btn primary full" style="margin-top:12px;padding:12px;font-size:13px" onclick="openAIDrawer()">Abrir Ultra IA</button>
+    <div class="hero-action-row" style="margin-top:12px">
+      <button class="btn primary hero-action-btn" onclick="openAIDrawer()">Abrir Ultra IA</button>
+      <button class="btn secondary hero-action-btn" onclick="goToPage('more');setTimeout(()=>showMoreSub('scanner'),80)">Rodar Scanner</button>
+    </div>
   </div>`;
 
   html+=`<div style="background:linear-gradient(135deg,rgba(0,245,160,0.10) 0%,rgba(61,100,255,0.07) 100%);border:1px solid rgba(0,245,160,0.16);border-radius:var(--radius-m);padding:14px;margin-bottom:14px;position:relative;overflow:hidden">
