@@ -1,5 +1,5 @@
 /* =====================================================
-   PRADO SPORTS AI v9 — Ultra Premium App Logic
+   PRADO SPORTS AI V15 — Ultra Premium App Logic
    IA Real via Anthropic Claude API
    Visual: Next-gen Sports Intelligence Platform
 ===================================================== */
@@ -323,6 +323,34 @@ function sortMatchesPremium(list){ return [...list].sort((a,b)=>{ const d=matchP
 function mainMatches(list,max=6,minScore=700){ const sorted=sortMatchesPremium(list); const imp=sorted.filter(m=>isHomeMainEligible(m)&&matchPriorityScore(m)>=minScore); return (imp.length?imp:sorted.filter(isHomeMainEligible)).slice(0,max); }
 function groupedLeagueCodesPremium(byLeague){ return Object.keys(byLeague).sort((a,b)=>Math.max(...byLeague[b].map(matchPriorityScore))-Math.max(...byLeague[a].map(matchPriorityScore))); }
 
+
+function renderV15StatusPanel(){
+  const live=MATCHES.filter(m=>m.status==='live').length;
+  const scheduled=MATCHES.filter(m=>m.status==='scheduled').length;
+  const finished=MATCHES.filter(m=>m.status==='finished').length;
+  const top=[...PREDICTIONS].sort((a,b)=>b.confidence-a.confidence)[0];
+  const topMatch=top?MATCHES.find(x=>x.id===top.matchId):null;
+  return `<div class="v15-status-panel">
+    <div class="v15-status-head">
+      <div>
+        <div class="v15-status-kicker">Prado Pulse V15</div>
+        <div class="v15-status-title">Dados na tela, sem app vazio</div>
+      </div>
+      <div class="v15-status-orb">AI</div>
+    </div>
+    <div class="v15-status-grid">
+      <div><b>${live}</b><span>Ao vivo</span></div>
+      <div><b>${scheduled}</b><span>Pré-jogo</span></div>
+      <div><b>${finished}</b><span>Resultados</span></div>
+      <div><b>${PREDICTIONS.length}</b><span>Análises</span></div>
+    </div>
+    <div class="v15-status-signal">
+      <span>${topMatch?`${teamName(topMatch.home)} x ${teamName(topMatch.away)}`:'Aguardando jogos'}</span>
+      <b>${top?top.confidence+'% IA':'Pronto'}</b>
+    </div>
+  </div>`;
+}
+
 // ===================== HOME PAGE =====================
 function renderHome(){
   const live=sortMatchesPremium(MATCHES.filter(m=>m.status==='live'));
@@ -365,6 +393,8 @@ function renderHome(){
     <button class="shortcut-card" onclick="goToPage('more');setTimeout(()=>showMoreSub('scanner'),80)"><span class="shortcut-icon">🔍</span><span class="shortcut-title">Scanner</span><span class="shortcut-sub">Valor esperado</span></button>
     <button class="shortcut-card" onclick="goToPage('news')"><span class="shortcut-icon">📰</span><span class="shortcut-title">Notícias</span><span class="shortcut-sub">Resumo e agenda</span></button>
   </div>`;
+
+  html += renderV15StatusPanel();
 
   if(isDemo){
     html += `<div class="demo-alert"><div class="demo-alert-title">🎮 Demonstração pronta para mostrar o app</div><div class="demo-alert-sub">Enquanto a API real não responde, o app libera jogos demo completos com análise da IA para você apresentar o produto com visual premium.</div></div>`;
@@ -433,6 +463,77 @@ function renderHome(){
 
   document.getElementById('page-home').innerHTML = html;
   updateLiveDot();
+}
+
+
+function sectionHead(title, linkLabel, onClick){
+  const fn = onClick ? `(${onClick.toString()})()` : '';
+  return `<div class="section-head">
+    <div class="section-title display">${title}</div>
+    ${linkLabel ? `<div class="section-more" onclick="${fn}">${linkLabel} →</div>` : ''}
+  </div>`;
+}
+function emptyState(icon, text){
+  return `<div class="empty-state"><div class="empty-icon">${icon}</div><div class="empty-title">${text}</div></div>`;
+}
+
+function liveCard(m){
+  const lg=leagueOf(m);
+  const insight=getPredictionForMatch(m);
+  return `<div class="live-premium-card" onclick="openMatchDetail('${m.id}')">
+    <div class="live-premium-top"><span>${lg.icon} ${lg.name}</span><b>${m.minute||0}'</b></div>
+    <div class="live-premium-teams">
+      <div class="live-premium-team">${crestHTML(m.home,24)}<span>${teamName(m.home)}</span></div>
+      <div class="live-premium-team">${crestHTML(m.away,24)}<span>${teamName(m.away)}</span></div>
+    </div>
+    <div class="live-premium-score">${m.hs} <span>–</span> ${m.as}</div>
+    <div class="live-premium-insight">
+      <span>${insight?insight.pick:'Leitura IA'}</span>
+      <b>${insight?insight.confidence+'%':'IA'}</b>
+    </div>
+  </div>`;
+}
+
+function matchRow(m, showDate=false){
+  const isFav=state.favMatches.includes(m.id);
+  const lg=leagueOf(m);
+  let timeBlock;
+  if(m.status==='live') timeBlock=`<div class="match-timebox live"><div>${m.minute||0}'</div><span>AO VIVO</span></div>`;
+  else if(m.status==='finished') timeBlock=`<div class="match-timebox"><div>FIM</div><span>${fmtDate(m.date)}</span></div>`;
+  else timeBlock=`<div class="match-timebox"><div>${fmtTime(m.date)}</div>${showDate?`<span>${fmtDate(m.date)}</span>`:'<span>HOJE</span>'}</div>`;
+
+  const scoreBlock=(m.status==='scheduled')
+    ?`<div class="match-scorebox vs">VS</div>`
+    :`<div class="match-scorebox"><b>${m.hs}</b><b>${m.as}</b></div>`;
+
+  return `<div class="match-row premium-match-row" onclick="openMatchDetail('${m.id}')">
+    ${timeBlock}
+    <div class="match-info">
+      <div class="match-league-mini">${lg.icon} ${lg.name}</div>
+      <div class="match-team-line">${crestHTML(m.home,20)}<span>${teamName(m.home)}</span></div>
+      <div class="match-team-line">${crestHTML(m.away,20)}<span>${teamName(m.away)}</span></div>
+    </div>
+    ${scoreBlock}
+    <button class="match-fav-btn ${isFav?'active':''}" onclick="event.stopPropagation();toggleFavMatch('${m.id}')">${isFav?'⭐':'☆'}</button>
+  </div>`;
+}
+
+function compTile(code){
+  const lg=LEAGUES[code];
+  if(!lg) return '';
+  const count=MATCHES.filter(m=>m.league===code).length;
+  return `<div class="comp-tile premium-comp-tile" onclick="goToPage('live');setLiveLeagueFilter('${code}')">
+    <div class="comp-tile-icon">${lg.icon}</div>
+    <div class="comp-tile-name">${lg.name}</div>
+    <div class="comp-tile-count">${count} jogo${count!==1?'s':''}</div>
+  </div>`;
+}
+function toggleFavMatch(id){
+  const i=state.favMatches.indexOf(id);
+  if(i>-1){ state.favMatches.splice(i,1); toast('Removido dos favoritos','☆'); }
+  else { state.favMatches.push(id); toast('Adicionado aos favoritos!','⭐'); }
+  localStorage.setItem('prado_fav_matches',JSON.stringify(state.favMatches));
+  if(state.page==='home') renderHome(); else if(state.page==='live') renderLive();
 }
 
 // ===================== LIVE CENTER =====================
