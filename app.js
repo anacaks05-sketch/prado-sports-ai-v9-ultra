@@ -30,6 +30,38 @@ const PRADO_PAYMENT_CONFIG = {
 
 const PRADO_PREMIUM_STORAGE_KEY = 'prado_premium_access_v1';
 
+
+// ===================== DEMO SHOWCASE MODE =====================
+function isoAt(dayOffset=0, hour=21, minute=0){
+  const d=new Date();
+  d.setHours(hour, minute, 0, 0);
+  d.setDate(d.getDate()+dayOffset);
+  return d.toISOString();
+}
+function buildDemoMatches(){
+  return [
+    {id:'demo-live-1', league:'EPL', round:'Demo Showcase', home:'MCI', away:'ARS', date:isoAt(0,20,30), status:'live', minute:73, hs:2, as:1,
+      stats:{possession:[58,42],shotsOnTarget:[7,4],shotsOffTarget:[4,5],corners:[6,3],fouls:[7,10],yellow:[1,2],red:[0,0],xg:[2.11,1.22]}},
+    {id:'demo-live-2', league:'BRA_A', round:'Demo Showcase', home:'FLA', away:'PAL', date:isoAt(0,19,0), status:'live', minute:61, hs:1, as:1,
+      stats:{possession:[52,48],shotsOnTarget:[5,5],shotsOffTarget:[6,4],corners:[7,4],fouls:[9,12],yellow:[2,2],red:[0,0],xg:[1.45,1.08]}},
+    {id:'demo-live-3', league:'UCL', round:'Demo Showcase', home:'RMA', away:'BAY', date:isoAt(0,21,0), status:'live', minute:38, hs:0, as:0,
+      stats:{possession:[49,51],shotsOnTarget:[3,2],shotsOffTarget:[3,4],corners:[2,2],fouls:[6,6],yellow:[0,1],red:[0,0],xg:[0.71,0.63]}},
+    {id:'demo-sched-1', league:'BRA_A', round:'Demo Preview', home:'BOT', away:'FLU', date:isoAt(0,22,15), status:'scheduled', minute:0, hs:0, as:0,
+      stats:{possession:[50,50],shotsOnTarget:[0,0],shotsOffTarget:[0,0],corners:[0,0],fouls:[0,0],yellow:[0,0],red:[0,0],xg:[0,0]}},
+    {id:'demo-sched-2', league:'LIBERTA', round:'Demo Preview', home:'RMA', away:'BAR', date:isoAt(1,21,45), status:'scheduled', minute:0, hs:0, as:0,
+      stats:{possession:[50,50],shotsOnTarget:[0,0],shotsOffTarget:[0,0],corners:[0,0],fouls:[0,0],yellow:[0,0],red:[0,0],xg:[0,0]}},
+    {id:'demo-finished-1', league:'WC', round:'Demo Result', home:'BRA', away:'ARG', date:isoAt(-1,20,0), status:'finished', minute:90, hs:2, as:0,
+      stats:{possession:[55,45],shotsOnTarget:[6,2],shotsOffTarget:[5,4],corners:[5,2],fouls:[11,13],yellow:[2,3],red:[0,0],xg:[1.94,0.72]}}
+  ];
+}
+function activateDemoMode(reason='Modo demonstração ativo'){
+  window.PRADO_DEMO_MODE=true;
+  MATCHES=buildDemoMatches();
+  PREDICTIONS=MATCHES.map(m=>buildLocalAIInsight(m)).filter(Boolean);
+  window.PRADO_API_STATUS={ok:false,message:reason};
+  updateApiStatus(null,'Modo demo ativo');
+}
+
 // ===================== PREMIUM SYSTEM =====================
 function openPremiumCheckout(){ window.open(PRADO_PAYMENT_CONFIG.checkoutUrl,'_blank','noopener,noreferrer'); }
 function openPremiumSupport(){
@@ -133,10 +165,10 @@ async function validateStoredPremium(){
 
 // ===================== REAL API LOADER =====================
 async function loadRealDataIfConfigured(){
-  MATCHES=[]; PREDICTIONS=[];
+  MATCHES=[]; PREDICTIONS=[]; window.PRADO_DEMO_MODE=false;
   if(typeof PRADO_CONFIG==='undefined'||!PRADO_CONFIG.API_PROXY_URL){
-    window.PRADO_API_STATUS={ok:false,message:'API não configurada'};
-    updateApiStatus(false,'Modo demo'); return;
+    activateDemoMode('API não configurada — usando demonstração inteligente');
+    return;
   }
   updateApiStatus(null,'Conectando à API...');
   try{
@@ -145,14 +177,12 @@ async function loadRealDataIfConfigured(){
       MATCHES=realMatches;
       PREDICTIONS=PradoAPI.makePredictions(realMatches);
       window.PRADO_API_STATUS={ok:true,message:`${realMatches.length} jogos carregados`};
-      updateApiStatus(true,`${realMatches.length} jogos ao vivo`);
+      updateApiStatus(true,`${realMatches.length} jogos carregados`);
     } else {
-      window.PRADO_API_STATUS={ok:true,message:'API conectada, sem jogos no filtro'};
-      updateApiStatus(true,'API conectada · sem jogos agora');
+      activateDemoMode('Sem jogos retornados pela API — demo liberado');
     }
   }catch(err){
-    window.PRADO_API_STATUS={ok:false,message:err?.message||'Erro de API'};
-    updateApiStatus(false,'Erro de conexão');
+    activateDemoMode(err?.message||'Falha de conexão — demo liberado');
   }
 }
 function updateApiStatus(ok, text){
@@ -169,6 +199,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadRealDataIfConfigured();
   await validateStoredPremium();
   bindNav();
+  setupAIFloatingButton();
   renderHome();
   renderLive();
   renderAI();
@@ -216,6 +247,17 @@ function showMoreSub(view){
 function hideMoreSub(){
   document.getElementById('more-sub').style.display='none';
   document.getElementById('more-menu').style.display='block';
+}
+function openSettingsPanel(){
+  const overlay=document.getElementById('settings-overlay');
+  const body=document.getElementById('settings-panel-body');
+  if(!overlay||!body) return;
+  body.innerHTML=renderSettingsSub();
+  overlay.classList.add('open');
+  bindNotifSwitches();
+}
+function closeSettingsPanel(){
+  document.getElementById('settings-overlay')?.classList.remove('open');
 }
 function updateLiveDot(){
   const dot=document.getElementById('nav-live-dot');
@@ -290,25 +332,48 @@ function renderHome(){
   const upcoming=mainMatches(sortMatchesPremium(MATCHES.filter(m=>!isSameDay(m.date,todayKey)&&m.status==='scheduled')),4,820);
   const recent=mainMatches(MATCHES.filter(m=>m.status==='finished'),3,820);
   const topPicks=[...PREDICTIONS].sort((a,b)=>b.confidence-a.confidence).slice(0,3);
+  const isDemo=!!window.PRADO_DEMO_MODE;
 
   let html = '';
-
-  // === HERO ===
   const liveCount=live.length;
   const todayCount=MATCHES.filter(m=>isSameDay(m.date,todayKey)).length;
   const aiCount=PREDICTIONS.length;
-  html += `<div class="home-hero">
-    <div class="hero-eyebrow">🏆 Inteligência Esportiva Premium</div>
-    <div class="hero-title">Futebol com<br>IA de verdade</div>
-    <div class="hero-sub">Dados reais, análises ao vivo e palpites com inteligência artificial avançada.</div>
-    <div class="hero-stats">
-      <div class="hero-stat"><div class="hero-stat-val">${liveCount||'—'}</div><div class="hero-stat-lbl">Ao vivo</div></div>
-      <div class="hero-stat"><div class="hero-stat-val">${todayCount||'—'}</div><div class="hero-stat-lbl">Hoje</div></div>
-      <div class="hero-stat"><div class="hero-stat-val">${aiCount||'—'}</div><div class="hero-stat-lbl">Palpites IA</div></div>
+  const premiumCount=isPremiumActive()? 'ON' : 'PRO';
+
+  html += `<div class="home-hero home-hero-upgrade">
+    <div class="hero-badge-row">
+      <div class="hero-badge-pill">⚡ Painel premium</div>
+      ${isDemo?'<div class="hero-badge-pill gold">🎮 Jogos demo ativos</div>':'<div class="hero-badge-pill">📡 API ao vivo</div>'}
+    </div>
+    <div class="hero-title">Prado Sports <span>Control Room</span></div>
+    <div class="hero-sub">Central moderna para acompanhar jogos, explorar palpites com IA, scanner de valor e leitura ao vivo em um só lugar.</div>
+    <div class="hero-action-row">
+      <button class="btn primary hero-action-btn" onclick="goToPage('ai')">✨ Abrir IA</button>
+      <button class="btn secondary hero-action-btn" onclick="goToPage('live')">🔴 Ver ao vivo</button>
+    </div>
+    <div class="hero-stats hero-stats-upgrade">
+      <div class="hero-stat-card"><div class="hero-stat-val">${liveCount||'—'}</div><div class="hero-stat-lbl">Ao vivo</div></div>
+      <div class="hero-stat-card"><div class="hero-stat-val">${todayCount||'—'}</div><div class="hero-stat-lbl">Hoje</div></div>
+      <div class="hero-stat-card"><div class="hero-stat-val">${aiCount||'—'}</div><div class="hero-stat-lbl">Palpites</div></div>
+      <div class="hero-stat-card"><div class="hero-stat-val">${premiumCount}</div><div class="hero-stat-lbl">Premium</div></div>
     </div>
   </div>`;
 
-  // === LIVE ===
+  html += `<div class="home-shortcuts">
+    <button class="shortcut-card" onclick="goToPage('live')"><span class="shortcut-icon">🔴</span><span class="shortcut-title">Ao vivo</span><span class="shortcut-sub">Partidas em andamento</span></button>
+    <button class="shortcut-card" onclick="goToPage('ai')"><span class="shortcut-icon">🧠</span><span class="shortcut-title">IA Palpites</span><span class="shortcut-sub">Análises e sinais</span></button>
+    <button class="shortcut-card" onclick="goToPage('more');setTimeout(()=>showMoreSub('scanner'),80)"><span class="shortcut-icon">🔍</span><span class="shortcut-title">Scanner</span><span class="shortcut-sub">Valor esperado</span></button>
+    <button class="shortcut-card" onclick="goToPage('news')"><span class="shortcut-icon">📰</span><span class="shortcut-title">Notícias</span><span class="shortcut-sub">Resumo e agenda</span></button>
+  </div>`;
+
+  if(isDemo){
+    html += `<div class="demo-alert"><div class="demo-alert-title">🎮 Demonstração pronta para mostrar o app</div><div class="demo-alert-sub">Enquanto a API real não responde, o app libera jogos demo completos com análise da IA para você apresentar o produto com visual premium.</div></div>`;
+    html += sectionHead('🎮 Jogos demo em destaque', 'Abrir central', ()=>goToPage('live'));
+    html += `<div class="card" style="padding:0 2px">`;
+    MATCHES.slice(0,3).forEach(m=>{ html += matchRow(m,true); });
+    html += `</div>`;
+  }
+
   html += sectionHead('🔴 Ao vivo agora', live.length?`${live.length} jogos`:null, ()=>goToPage('live'));
   if(live.length){
     html += `<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;margin:0 -14px;padding:0 14px 6px">`;
@@ -318,7 +383,6 @@ function renderHome(){
     html += emptyState('📡','Nenhum jogo ao vivo agora. A API verifica automaticamente.');
   }
 
-  // === TODAY ===
   html += sectionHead('📅 Jogos de hoje', todayAll.length>today.length?'Ver todos':null, ()=>{ goToPage('more'); showMoreSub('calendar'); });
   if(today.length){
     html += `<div class="card" style="padding:0 2px">`;
@@ -328,7 +392,6 @@ function renderHome(){
     html += emptyState('📅','Sem jogos principais hoje. Veja todos no calendário.');
   }
 
-  // === AI TOP PICKS ===
   if(topPicks.length){
     html += sectionHead('🤖 Top palpites IA', 'Ver todos', ()=>goToPage('ai'));
     html += `<div style="display:flex;flex-direction:column;gap:8px">`;
@@ -347,7 +410,6 @@ function renderHome(){
     html += `</div>`;
   }
 
-  // === UPCOMING ===
   if(upcoming.length){
     html += sectionHead('⏰ Próximos jogos', 'Calendário', ()=>{ goToPage('more'); showMoreSub('calendar'); });
     html += `<div class="card" style="padding:0 2px">`;
@@ -355,77 +417,13 @@ function renderHome(){
     html += `</div>`;
   }
 
-  // === COMPETITIONS ===
   html += sectionHead('🏆 Competições', 'Ver todas', ()=>{ goToPage('more'); showMoreSub('competitions'); });
   html += `<div class="comp-grid">`;
   ['WC','BRA_A','UCL','LIBERTA'].forEach(code=>{ if(LEAGUES[code]) html+=compTile(code); });
   html += `</div>`;
 
-  html += `<div style="height:8px"></div>`;
-
   document.getElementById('page-home').innerHTML = html;
   updateLiveDot();
-}
-
-function sectionHead(title, linkLabel, onClick){
-  const fn = onClick ? `(${onClick.toString()})()` : '';
-  return `<div class="section-head">
-    <div class="section-title display">${title}</div>
-    ${linkLabel ? `<div class="section-more" onclick="${fn}">${linkLabel} →</div>` : ''}
-  </div>`;
-}
-function emptyState(icon, text){
-  return `<div class="empty-state"><div class="empty-icon">${icon}</div><div class="empty-title">${text}</div></div>`;
-}
-
-function liveCard(m){
-  const lg=leagueOf(m);
-  return `<div onclick="openMatchDetail('${m.id}')" style="flex-shrink:0;width:170px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-m);padding:12px;cursor:pointer;background-image:linear-gradient(135deg,rgba(255,59,92,0.08) 0%,transparent 70%)">
-    <div style="font-size:10px;color:var(--text-faint);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${lg.icon} ${lg.name}</div>
-    <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px">${teamName(m.home)}</div>
-    <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:8px">${teamName(m.away)}</div>
-    <div style="display:flex;align-items:center;justify-content:space-between">
-      <div style="font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700">${m.hs} – ${m.as}</div>
-      <div class="badge badge-live">${m.minute||'0'}'</div>
-    </div>
-  </div>`;
-}
-
-function matchRow(m, showDate=false){
-  const isFav=state.favMatches.includes(m.id);
-  let timeBlock;
-  if(m.status==='live') timeBlock=`<div style="min-width:40px;text-align:center"><div class="badge badge-live" style="font-size:8px;padding:2px 5px">${m.minute}'</div><div style="font-size:8px;color:var(--live);font-weight:700;margin-top:2px">LIVE</div></div>`;
-  else if(m.status==='finished') timeBlock=`<div style="min-width:40px;text-align:center;font-size:10px;color:var(--text-faint)"><div style="font-weight:700">FIM</div><div>${fmtDate(m.date)}</div></div>`;
-  else timeBlock=`<div style="min-width:40px;text-align:center;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-dim)"><div style="font-weight:600">${fmtTime(m.date)}</div>${showDate?`<div style="font-size:9px;color:var(--text-faint)">${fmtDate(m.date)}</div>`:''}</div>`;
-  const scoreBlock=(m.status==='scheduled')
-    ?`<div style="min-width:32px;text-align:center;font-size:13px;color:var(--text-faint);font-weight:600">vs</div>`
-    :`<div style="min-width:32px;text-align:center"><div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;line-height:1.1">${m.hs}</div><div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;line-height:1.1">${m.as}</div></div>`;
-  return `<div class="match-row" onclick="openMatchDetail('${m.id}')">
-    ${timeBlock}
-    <div style="flex:1;min-width:0">
-      <div style="display:flex;align-items:center;gap:6px;padding:2px 0"><span style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${teamName(m.home)}</span></div>
-      <div style="display:flex;align-items:center;gap:6px;padding:2px 0"><span style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${teamName(m.away)}</span></div>
-    </div>
-    ${scoreBlock}
-    <div onclick="event.stopPropagation();toggleFavMatch('${m.id}')" style="padding:6px;font-size:16px;color:${isFav?'var(--gold)':'var(--text-faint)'}">${isFav?'⭐':'☆'}</div>
-  </div>`;
-}
-
-function compTile(code){
-  const lg=LEAGUES[code];
-  const count=MATCHES.filter(m=>m.league===code).length;
-  return `<div class="comp-tile" onclick="goToPage('live');setLiveLeagueFilter('${code}')">
-    <div class="comp-tile-icon">${lg.icon}</div>
-    <div class="comp-tile-name">${lg.name}</div>
-    <div class="comp-tile-count">${count} jogo${count!==1?'s':''}</div>
-  </div>`;
-}
-function toggleFavMatch(id){
-  const i=state.favMatches.indexOf(id);
-  if(i>-1){ state.favMatches.splice(i,1); toast('Removido dos favoritos','☆'); }
-  else { state.favMatches.push(id); toast('Adicionado aos favoritos!','⭐'); }
-  localStorage.setItem('prado_fav_matches',JSON.stringify(state.favMatches));
-  if(state.page==='home') renderHome(); else if(state.page==='live') renderLive();
 }
 
 // ===================== LIVE CENTER =====================
@@ -538,15 +536,18 @@ function statsHasValues(stats){
 
 // ===================== AI PAGE =====================
 function renderAI(){
-  let html=`<div class="section-head" style="margin-top:4px"><div class="section-title display">⭐ IA de Palpites</div></div>`;
+  let html=`<div class="section-head" style="margin-top:4px"><div class="section-title display">🧠 Central IA Premium</div></div>`;
 
-  // AI Brain banner
-  html+=`<div style="background:linear-gradient(135deg,rgba(0,245,160,0.12) 0%,rgba(61,100,255,0.08) 100%);border:1px solid rgba(0,245,160,0.2);border-radius:var(--radius-m);padding:14px;margin-bottom:14px;position:relative;overflow:hidden">
-    <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">🧠 Análise IA Real — Powered by Claude</div>
+  html+=`<div class="ai-command-hero">
+    <div class="ai-command-kicker">✦ Prado Ultra Brain</div>
+    <div class="ai-command-title">Central IA<br><span>Revolution Ultra</span></div>
+    <div class="ai-command-sub">Análises modernas de partidas, scanner de valor, leitura tática, riscos e oportunidades de entrada em um só painel.</div>
+    <button class="btn primary full" style="margin-top:12px;padding:12px;font-size:13px" onclick="openAIDrawer()">Abrir Ultra IA</button>
+  </div>`;
+
+  html+=`<div style="background:linear-gradient(135deg,rgba(0,245,160,0.10) 0%,rgba(61,100,255,0.07) 100%);border:1px solid rgba(0,245,160,0.16);border-radius:var(--radius-m);padding:14px;margin-bottom:14px;position:relative;overflow:hidden">
+    <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">🧠 Análise IA Real</div>
     <div style="font-size:12.5px;color:var(--text-dim);line-height:1.55">IA com leitura de <b style="color:var(--text)">placar ao vivo, estatísticas da API, xG, pressão e risco da entrada</b>. Cada palpite explica o raciocínio e avisa quando é melhor esperar.</div>
-    <div onclick="openAIDrawer()" style="display:inline-flex;align-items:center;gap:6px;margin-top:10px;background:var(--green-dim);border:1px solid rgba(0,245,160,0.2);border-radius:99px;padding:7px 14px;font-size:12px;font-weight:600;color:var(--green);cursor:pointer">
-      💬 Fale com a IA → Analista ao vivo
-    </div>
   </div>`;
 
   const picks=[...PREDICTIONS].map(p=>({p,m:MATCHES.find(x=>x.id===p.matchId)})).filter(x=>x.m).sort((a,b)=>b.p.confidence-a.p.confidence);
@@ -667,9 +668,8 @@ function renderMore(){
     {icon:'📊',label:'Simulador de apostas',action:`showMoreSub('simulator')`,premium:true},
     {icon:'🔍',label:'Scanner de valor (EV)',action:`showMoreSub('scanner')`,premium:true},
   ]);
-  html+=menuSection('Configurações',[
-    {icon:'🔔',label:'Notificações',action:`showMoreSub('notifications')`},
-    {icon:'⚙️',label:'Configurações do app',action:`showMoreSub('settings')`},
+  html+=menuSection('Sistema',[
+    {icon:'⚙️',label:'Configurações & notificações',action:`openSettingsPanel()`},
     {icon:'📲',label:'Instalar como app',action:`showMoreSub('install')`},
     {icon:'ℹ️',label:'Sobre o Prado Sports AI',action:`showMoreSub('about')`},
   ]);
@@ -896,7 +896,10 @@ function renderSettingsSub(){
     <div class="setting-row"><div><div class="setting-label">Idioma</div><div class="setting-sub">Idioma do aplicativo</div></div><select style="background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px;font-size:12px"><option>Português (BR)</option><option>English</option><option>Español</option></select></div>
     <div class="setting-row" style="border-bottom:none"><div><div class="setting-label">Time favorito</div><div class="setting-sub">Receba destaques do seu time</div></div><select onchange="setFavTeam(this.value)" style="background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px;font-size:12px"><option value="">Nenhum</option>${Object.keys(TEAMS).map(c=>`<option value="${c}" ${state.favTeam===c?'selected':''}>${teamName(c)}</option>`).join('')}</select></div>
   </div>
-  <div class="menu-label">Aparência</div>
+  <div class="menu-label">Notificações</div>
+  <div class="card" style="padding:12px;margin-bottom:8px;background:var(--grad-card)"><div style="font-size:12px;color:var(--text-dim);line-height:1.6">Centralize aqui os alertas do app: gols, cartões, início da partida e sinais da IA.</div></div>
+  ${renderNotificationsSub()}
+  <div class="menu-label" style="margin-top:14px">Aparência</div>
   <div class="card" style="padding:12px;margin-bottom:14px"><div style="display:flex;align-items:center;gap:10px"><div style="font-size:20px">🌙</div><div><div class="setting-label">Modo escuro premium</div><div class="setting-sub">Tema escuro fixo — profissional e econômico em OLED</div></div></div></div>
   <div class="menu-label">Dados da API</div>
   <div class="card" style="padding:12px"><div style="font-size:12.5px;color:var(--text-dim);line-height:1.6">Status: <b style="color:var(--text)">${window.PRADO_API_STATUS?.message||'Aguardando...'}</b><br>Configure sua chave em <span style="font-family:'JetBrains Mono',monospace;color:var(--green)">Vercel → APISPORTS_KEY</span> para dados reais.</div></div>`;
@@ -935,6 +938,69 @@ function renderAboutSub(){
     IA analista: <b style="color:var(--text)">Anthropic Claude</b><br>
     Suporte: <a href="https://wa.me/${PRADO_PAYMENT_CONFIG.whatsapp}" style="color:var(--green)" target="_blank">WhatsApp</a>
   </div>`;
+}
+
+
+// ===================== FLOATING IA BUTTON =====================
+function setupAIFloatingButton(){
+  const btn=document.getElementById('ai-fab');
+  if(!btn) return;
+  let drag=false, moved=false, startX=0, startY=0, baseX=0, baseY=0, lastDX=0, lastDY=0;
+  const margin=10;
+  function clampPos(x,y){
+    const r=btn.getBoundingClientRect();
+    const w=r.width||58, h=r.height||58;
+    const maxX=window.innerWidth-w-margin;
+    const maxY=window.innerHeight-h-margin;
+    return {x:Math.max(margin,Math.min(maxX,x)), y:Math.max(margin+8,Math.min(maxY,y))};
+  }
+  function setPos(x,y){
+    const p=clampPos(x,y);
+    btn.style.left=p.x+'px';
+    btn.style.top=p.y+'px';
+    btn.style.right='auto';
+    btn.style.bottom='auto';
+    return p;
+  }
+  try{
+    const saved=JSON.parse(localStorage.getItem('prado_ai_fab_pos')||'null');
+    if(saved&&Number.isFinite(saved.x)&&Number.isFinite(saved.y)) requestAnimationFrame(()=>setPos(saved.x,saved.y));
+  }catch{}
+  btn.addEventListener('pointerdown',(e)=>{
+    drag=true; moved=false; lastDX=0; lastDY=0;
+    const r=btn.getBoundingClientRect();
+    startX=e.clientX; startY=e.clientY; baseX=r.left; baseY=r.top;
+    btn.classList.add('dragging');
+    btn.setPointerCapture?.(e.pointerId);
+  });
+  btn.addEventListener('pointermove',(e)=>{
+    if(!drag) return;
+    const dx=e.clientX-startX, dy=e.clientY-startY;
+    lastDX=dx; lastDY=dy;
+    if(Math.abs(dx)+Math.abs(dy)>6) moved=true;
+    if(moved){ e.preventDefault(); setPos(baseX+dx,baseY+dy); }
+  });
+  function finishDrag(e){
+    if(!drag) return;
+    drag=false; btn.classList.remove('dragging');
+    btn.releasePointerCapture?.(e.pointerId);
+    if(moved){
+      const p=setPos(baseX+lastDX,baseY+lastDY);
+      localStorage.setItem('prado_ai_fab_pos',JSON.stringify(p));
+      btn.dataset.justDragged='1';
+      setTimeout(()=>{ delete btn.dataset.justDragged; },180);
+    }
+  }
+  btn.addEventListener('pointerup',finishDrag);
+  btn.addEventListener('pointercancel',finishDrag);
+  btn.addEventListener('click',(e)=>{
+    if(btn.dataset.justDragged==='1'){ e.preventDefault(); return; }
+    openAIDrawer();
+  });
+  window.addEventListener('resize',()=>{
+    const r=btn.getBoundingClientRect();
+    if(r.width) setPos(r.left,r.top);
+  });
 }
 
 // ===================== AI DRAWER (CLAUDE REAL) =====================
@@ -1006,7 +1072,7 @@ Seja direto, analítico e use linguagem de especialista em apostas esportivas. M
 
     const messages=[...state.aiHistory];
 
-    const response=await fetch('/api/claude',{
+    const response=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({

@@ -6,12 +6,12 @@
 <title>Prado Sports AI</title>
 <meta name="description" content="A mais avançada plataforma de inteligência esportiva do Brasil.">
 <meta name="theme-color" content="#050A12">
-<link rel="manifest" href="./manifest.json?v=v9">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v9">
+<link rel="manifest" href="./manifest.json?v=v12modern">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v12modern">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Prado Sports AI">
-<link rel="stylesheet" href="./style.css?v=v9">
+<link rel="stylesheet" href="./style.css?v=v12modern">
 </head>
 <body>
 
@@ -43,6 +43,7 @@
       <button class="icon-btn" id="search-btn" aria-label="Pesquisar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
       </button>
+      <button class="icon-btn settings-topbar-btn" id="settings-btn" onclick="openSettingsPanel()" aria-label="Configurações">⚙️</button>
       <button class="icon-btn crown-btn" id="premium-topbar-btn" onclick="goToPage('more');setTimeout(()=>showMoreSub('premium'),50)" aria-label="Premium" style="display:none">
         <svg viewBox="0 0 24 24"><path d="M2 19l3-10 4 5 3-8 3 8 4-5 3 10z" fill="currentColor"/></svg>
       </button>
@@ -85,6 +86,11 @@
     </button>
   </nav>
 
+  <!-- Floating movable IA button -->
+  <button class="ai-chat-fab" id="ai-fab" aria-label="Abrir Ultra IA">
+    <span>✦</span>
+  </button>
+
   <!-- Match Detail -->
   <div class="detail-overlay" id="match-detail" role="dialog" aria-modal="true"></div>
 
@@ -117,6 +123,17 @@
   </div>
   <div class="ai-drawer-bg" id="ai-drawer-bg" onclick="closeAIDrawer()"></div>
 
+  <!-- Settings Panel -->
+  <div class="settings-overlay" id="settings-overlay">
+    <div class="settings-panel">
+      <div class="settings-panel-head">
+        <button class="icon-btn" onclick="closeSettingsPanel()">←</button>
+        <div class="settings-panel-title">Configurações</div>
+      </div>
+      <div class="settings-panel-body" id="settings-panel-body"></div>
+    </div>
+  </div>
+
   <!-- Search -->
   <div class="search-overlay" id="search-overlay">
     <div class="search-wrap">
@@ -144,9 +161,9 @@
 
 </div>
 
-<script src="./data.js?v=v9"></script>
-<script src="./config.js?v=v9"></script>
-<script src="./api.js?v=v9"></script>
-<script src="./app.js?v=v9"></script>
+<script src="./data.js?v=v12modern"></script>
+<script src="./config.js?v=v12modern"></script>
+<script src="./api.js?v=v12modern"></script>
+<script src="./app.js?v=v12modern"></script>
 </body>
 </html>
